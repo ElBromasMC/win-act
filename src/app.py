@@ -1,4 +1,3 @@
-# app.py
 import os
 import sqlite3
 import csv
@@ -23,6 +22,7 @@ DATABASE_PATH = os.getenv("DB_PATH", "activation_data.db")
 TIMEZONE = pytz.timezone('America/Lima')
 
 # --- Key Status Constants ---
+
 STATUS_AVAILABLE = 'AVAILABLE'
 STATUS_PENDING = 'PENDING'
 STATUS_ACTIVATED = 'ACTIVATED'
@@ -33,6 +33,7 @@ if not API_KEY:
     raise ValueError("No API_KEY set for Flask application.")
 
 # --- Database Helper Functions (get_db, close_db, init_db, init_db_command remain the same) ---
+
 def get_db():
     if 'db' not in g:
         g.db = sqlite3.connect(DATABASE_PATH, detect_types=sqlite3.PARSE_DECLTYPES)
@@ -66,6 +67,7 @@ def init_db_command():
         conn.close()
 
 # --- Authentication Decorators (require_api_key, require_basic_auth remain the same) ---
+
 def require_api_key(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -93,6 +95,7 @@ def require_basic_auth(f):
     return decorated_function
 
 # --- Helper Functions ---
+
 def get_current_lima_time():
     utc_now = datetime.datetime.now(pytz.utc)
     lima_now = utc_now.astimezone(TIMEZONE)
@@ -161,7 +164,6 @@ def activate_windows():
         app.logger.error(f"Unexpected error during key issuance for serial {serial_number}: {e}")
         return jsonify({"error": "An unexpected error occurred"}), 500
 
-
 @app.route('/report_status', methods=['POST'])
 @require_api_key
 def report_activation_status():
@@ -221,9 +223,6 @@ def report_activation_status():
         app.logger.error(f"Unexpected error updating status for key {key} (Serial: {serial_number}): {e}")
         return jsonify({"error": "An unexpected error occurred during status update"}), 500
 
-
-# --- /upload GET and POST remain largely the same ---
-# (No changes needed for the key status update, as the DEFAULT handles 'AVAILABLE')
 @app.route('/upload', methods=['GET'])
 def upload_form():
     return render_template('upload.html')
@@ -284,43 +283,68 @@ def handle_upload():
         flash('Invalid file type. Please upload a .csv file.', 'error')
         return redirect(url_for('upload_form'))
 
-
-# --- /download/activations remains the same ---
-# (It reports the log of *retrievals*, not the final key status)
 @app.route('/download/activations', methods=['GET'])
-@require_basic_auth
+@require_basic_auth # Use Basic Auth for browser prompt
 def download_activations():
+    """
+    Provides a detailed activation log as a CSV file download,
+    joining activation attempts with the final key status.
+    """
     try:
         db = get_db()
         cursor = db.cursor()
-        # This still reports from the activations log table
-        cursor.execute("SELECT serial_number, key_used, activation_time FROM activations ORDER BY activation_time DESC")
-        activation_logs = cursor.fetchall()
 
+        # --- Updated SQL Query ---
+        # Join activations with keys to get the status associated with the key used
+        query = """
+            SELECT
+                a.serial_number,
+                a.key_used,
+                a.activation_time,
+                k.status
+            FROM
+                activations a
+            INNER JOIN
+                keys k ON a.key_used = k.key
+            ORDER BY
+                a.activation_time DESC
+        """
+        cursor.execute(query)
+        activation_details = cursor.fetchall() # Fetch all results from the JOIN
+
+        # Use io.StringIO to create CSV in memory
         si = io.StringIO()
         cw = csv.writer(si)
-        cw.writerow(['Serial Number', 'Key Used', 'Retrieval Time (America/Lima)']) # Header changed slightly for clarity
 
-        if activation_logs:
-             cw.writerows([(row['serial_number'], row['key_used'], row['activation_time']) for row in activation_logs])
+        # --- Updated CSV Header ---
+        cw.writerow(['Serial Number', 'Key Used', 'Retrieval Time (America/Lima)', 'Final Key Status'])
+
+        # --- Updated Data Row Writing ---
+        if activation_details:
+             # Access columns by name thanks to row_factory=sqlite3.Row
+             cw.writerows([
+                 (row['serial_number'], row['key_used'], row['activation_time'], row['status'])
+                 for row in activation_details
+             ])
         else:
-             cw.writerow(['No activation attempt records found.'])
+             # Message if no activation attempts have been logged yet
+             cw.writerow(['No activation attempt records found.', '', '', '']) # Add empty cells for alignment
 
+        # Prepare response
         output = make_response(si.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename=activation_retrieval_log.csv" # Renamed file
+        # --- Optionally update filename ---
+        output.headers["Content-Disposition"] = "attachment; filename=activation_details_log.csv"
         output.headers["Content-type"] = "text/csv"
-        app.logger.info("Activation retrieval log downloaded.")
+        app.logger.info("Activation details log downloaded.") # Updated log message
         return output
 
     except sqlite3.Error as e:
-        app.logger.error(f"Database error during activation log download: {e}")
-        return jsonify({"error": "Failed to retrieve activation logs from database."}), 500
+        app.logger.error(f"Database error during activation details log download: {e}")
+        return jsonify({"error": "Failed to retrieve activation details from database."}), 500
     except Exception as e:
-        app.logger.error(f"Unexpected error during activation log download: {e}")
+        app.logger.error(f"Unexpected error during activation details log download: {e}")
         return jsonify({"error": "An unexpected error occurred while generating the report."}), 500
 
-
-# --- Root and Main Execution remain the same ---
 @app.route('/')
 def index():
     api_key_status = "Set" if API_KEY else "Not Set (CRITICAL)"
@@ -331,6 +355,5 @@ if __name__ == '__main__':
         print(f"Database file not found at {DATABASE_PATH}. Initializing...")
         with app.app_context():
              init_db()
-    # Remember to use Gunicorn/Waitress for production
-    app.run(host='0.0.0.0', port=5000, debug=False) # Turn debug off for production/testing interactions
+    app.run(host='0.0.0.0', port=5000, debug=False)
 

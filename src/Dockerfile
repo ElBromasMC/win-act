@@ -3,6 +3,7 @@ FROM python:3.12-alpine AS base
 # Install run-time and compile-time system dependencies
 USER root
 RUN apk add --no-cache \
+    sqlite \
     bash
 
 # Create and switch to non-root user

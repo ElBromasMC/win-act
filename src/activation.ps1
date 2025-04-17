@@ -19,6 +19,7 @@ Finally, it reports whether the activation ultimately succeeded or failed back t
 # --- Configuration ---
 $serverBaseUrl = "http://<your_server_ip>:5000" # CHANGE THIS
 $apiKey = "YOUR_STRONG_SECRET_API_KEY"         # CHANGE THIS
+
 $maxRetries = 3
 $retryDelaySeconds = 15 # Wait between activation attempts
 
@@ -32,7 +33,7 @@ Function Report-ActivationStatus {
         [Parameter(Mandatory=$true)]
         [string]$Key,
         [Parameter(Mandatory=$true)]
-        [ValidateSet($statusActivated, $statusFailed)]
+        [ValidateSet('ACTIVATED','FAILED')]
         [string]$Status,
         [Parameter(Mandatory=$true)]
         [string]$SerialNumber
@@ -179,7 +180,7 @@ try {
             }
             # Don't remove the output file on failure immediately, might be useful for debugging last attempt
         } else {
-             Write-Warning "Activation attempt $attempt: Could not find output file '$outputFile'."
+             Write-Warning "Activation attempt $attempt Could not find output file '$outputFile'."
         }
 
         if (-not $activationSuccess -and $attempt -lt $maxRetries) {

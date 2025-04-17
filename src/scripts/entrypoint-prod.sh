@@ -1,5 +1,5 @@
 #!/bin/bash
 
 source venv/bin/activate
-exec python main.py
+exec flask run --host=0.0.0.0
 
