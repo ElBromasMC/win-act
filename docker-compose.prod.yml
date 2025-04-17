@@ -1,0 +1,13 @@
+services:
+  win-act:
+    restart: unless-stopped
+    image: "elbromasmc/win-act"
+    build:
+      context: ./src
+      dockerfile: ./Dockerfile
+      target: production
+    ports:
+      - "8080:5000"
+    environment:
+      - FLASK_ENV=production
+

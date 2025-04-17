@@ -1,0 +1,8 @@
+#!/bin/bash
+
+SCRIPT_PATH="$(realpath "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+PROJECT_ROOT="$(realpath "$SCRIPT_DIR/..")"
+
+"${PROJECT_ROOT}/bin/compose-dev" run --rm --build --service-ports win-act
+

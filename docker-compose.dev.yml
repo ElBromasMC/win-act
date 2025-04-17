@@ -1,0 +1,20 @@
+services:
+  win-act:
+    userns_mode: "keep-id:uid=1000,gid=1000"
+    restart: no
+    build:
+      context: ./src
+      dockerfile: ./Dockerfile
+      target: development
+    volumes:
+      - type: bind
+        source: ./src
+        target: /home/runner/src
+    ports:
+      - "8080:5000"
+    environment:
+      - FLASK_ENV=development
+
+x-podman:
+  in_pod: false
+

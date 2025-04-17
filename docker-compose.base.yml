@@ -1,0 +1,12 @@
+services:
+  win-act:
+    volumes:
+      - win-act-data:/home/runner/data
+    environment:
+      - API_KEY=${API_KEY}
+      - DB_PATH=/home/runner/data/activation.db
+      - FLASK_APP=app.py
+
+volumes:
+  win-act-data:
+
