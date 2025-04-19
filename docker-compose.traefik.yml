@@ -1,0 +1,21 @@
+services:
+  win-act:
+    networks:
+      - http_network
+    ports: !reset []
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=http_network"
+      - "traefik.http.routers.win-act.entrypoints=websecure"
+      - "traefik.http.routers.win-act.rule=Host(`${WEBSERVER_HOSTNAME}`)"
+      - "traefik.http.routers.win-act.tls=true"
+      - "traefik.http.routers.win-act.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.win-act.tls.domains[0].main=${WEBSERVER_HOSTNAME}"
+      - "traefik.http.routers.win-act.tls.options=default"
+      - "traefik.http.services.win-act.loadbalancer.server.port=5000"
+      - "traefik.http.services.win-act.loadbalancer.server.scheme=http"
+
+networks:
+  http_network:
+    external: true
+
