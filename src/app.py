@@ -346,9 +346,48 @@ def download_activations():
         return jsonify({"error": "An unexpected error occurred while generating the report."}), 500
 
 @app.route('/')
-def index():
-    api_key_status = "Set" if API_KEY else "Not Set (CRITICAL)"
-    return f"<h1>Windows Activation Server</h1><p>API Key Status: {api_key_status}</p><p>DB Path: {DATABASE_PATH}</p><p><a href='/upload'>Upload Keys</a></p>"
+@require_basic_auth # Protect this page with the same auth as the download
+def view_activation_log():
+    """Displays the activation log details in an HTML table."""
+    logs = [] # Initialize empty list
+    error_message = None
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        # Use the same JOIN query as the download endpoint
+        query = """
+            SELECT
+                a.serial_number,
+                a.key_used,
+                a.activation_time,
+                k.status
+            FROM
+                activations a
+            INNER JOIN
+                keys k ON a.key_used = k.key
+            ORDER BY
+                a.activation_time DESC
+        """
+        cursor.execute(query)
+        logs = cursor.fetchall() # Fetch all results
+
+    except sqlite3.Error as e:
+        app.logger.error(f"Database error viewing activation log: {e}")
+        # Set an error message to display on the page (or render a dedicated error template)
+        error_message = "Error retrieving activation log data from the database."
+        # Optional: flash(error_message, 'error') # If you prefer flashed messages
+    except Exception as e:
+        app.logger.error(f"Unexpected error viewing activation log: {e}")
+        error_message = "An unexpected error occurred while retrieving the activation log."
+        # Optional: flash(error_message, 'error')
+
+    # Render the HTML template, passing the fetched logs (or empty list) and any error
+    return render_template('log.html', logs=logs, error=error_message)
+
+#@app.route('/')
+#def index():
+#    api_key_status = "Set" if API_KEY else "Not Set (CRITICAL)"
+#    return f"<h1>Windows Activation Server</h1><p>API Key Status: {api_key_status}</p><p>DB Path: {DATABASE_PATH}</p><p><a href='/upload'>Upload Keys</a></p>"
 
 if __name__ == '__main__':
     if not os.path.exists(DATABASE_PATH):
