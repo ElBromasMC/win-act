@@ -156,31 +156,43 @@ try {
         # Capture output for analysis
         $outputFile = "$env:TEMP\slmgr_ato_output_$($PID)_$attempt.txt"
         Write-Host "Running: cscript.exe //Nologo $slmgrPath $atoArgs > `"$outputFile`""
-        $atoResult = Start-Process cscript.exe -ArgumentList "//Nologo", $slmgrPath, $atoArgs -RedirectStandardOutput $outputFile -Wait -NoNewWindow -PassThru
+        try {
+            # Run /ato, but we won't primarily rely on its output for success detection
+            $atoResult = Start-Process cscript.exe -ArgumentList "//Nologo", $slmgrPath, $atoArgs -RedirectStandardOutput $outputFile -Wait -NoNewWindow -PassThru
+            Start-Sleep -Seconds 10
 
-        if (Test-Path $outputFile) {
-            $outputContent = Get-Content $outputFile -Raw
-            Write-Host "--- slmgr.vbs /ato output ---"
-            Write-Host $outputContent
-            Write-Host "--- End slmgr.vbs output ---"
+            # --- NEW: Check WMI for Activation Status ---
+            Write-Host "Checking activation status via WMI..."
+            # LicenseStatus = 1 means Licensed (Activated)
+            $activationInfo = Get-CimInstance SoftwareLicensingProduct -Filter "Name like 'Windows%' AND LicenseStatus = 1"
 
-            # Check for success message (adjust string if needed based on OS language)
-            if ($outputContent -match "Product activated successfully") {
-                Write-Host "SUCCESS: Windows activated successfully on attempt $attempt!" -ForegroundColor Green
+            if ($activationInfo) {
+                Write-Host "SUCCESS: Windows activated successfully (verified via WMI) on attempt $attempt!" -ForegroundColor Green
                 $activationSuccess = $true
                 $finalStatus = $statusActivated
-                Remove-Item $outputFile -ErrorAction SilentlyContinue
+                if (Test-Path $outputFile) { Remove-Item $outputFile -ErrorAction SilentlyContinue } # Clean up log
                 break # Exit the retry loop on success
             } else {
-                Write-Warning "Activation failed on attempt $attempt. Exit code: $($atoResult.ExitCode). Output logged."
-                # Check for specific common errors if desired (e.g., key blocked, DNS issues)
-                if ($outputContent -match "0xC004C003") { Write-Warning "Detected error 0xC004C003: Activation server determined the specified product key is blocked."}
-                if ($outputContent -match "0x8007007B") { Write-Warning "Detected error 0x8007007B: DNS name does not exist (check network/KMS settings if applicable)."}
-                # ... add more error checks if needed
+                Write-Warning "Activation not confirmed via WMI after attempt $attempt. Exit code from slmgr: $($atoResult.ExitCode)."
+                # Log slmgr output for debugging failures
+                if (Test-Path $outputFile) {
+                    $outputContent = Get-Content $outputFile -Raw
+                    Write-Host "--- slmgr.vbs /ato output (Attempt $attempt) ---"
+                    Write-Host $outputContent
+                    Write-Host "--- End slmgr.vbs output ---"
+                    # You can still check for specific error codes here if needed
+                    if ($outputContent -match "0xC004C003") { Write-Warning "Detected error 0xC004C003: Activation server determined the specified product key is blocked."}
+                    if ($outputContent -match "0x8007007B") { Write-Warning "Detected error 0x8007007B: DNS name does not exist (check network/KMS settings if applicable)."}
+                    # Don't remove the log file on failure until the end
+                } else {
+                    Write-Warning "Could not find slmgr output file '$outputFile' for attempt $attempt."
+                }
             }
-            # Don't remove the output file on failure immediately, might be useful for debugging last attempt
-        } else {
-             Write-Warning "Activation attempt $attempt Could not find output file '$outputFile'."
+            # --- End of WMI Check ---
+
+        } catch {
+            Write-Warning "Error executing slmgr.vbs /ato on attempt $attempt: $($_.Exception.Message)"
+            # Optionally log this error in more detail
         }
 
         if (-not $activationSuccess -and $attempt -lt $maxRetries) {
