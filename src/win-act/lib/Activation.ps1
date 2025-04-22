@@ -191,7 +191,7 @@ try {
             # --- End of WMI Check ---
 
         } catch {
-            Write-Warning "Error executing slmgr.vbs /ato on attempt $attempt: $($_.Exception.Message)"
+            Write-Warning "Error executing slmgr.vbs /ato on attempt $attempt : $($_.Exception.Message)"
             # Optionally log this error in more detail
         }
 
